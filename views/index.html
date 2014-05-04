@@ -1,0 +1,27 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="container-full">
+  <div class="container">
+    <h1>彼告</h1>
+    <hr/>
+    <p>使用社交帐号登录：</p>
+    <ul>
+      <li>
+        {% if not if_auth['weibo'] %}
+        <a href="/auth/authorize/weibo">微博</a>
+        {% else %}
+        <a href="/auth/revoke/weibo">微博 (取消授权)</a>
+        {% end %}
+      </li>
+      <li>
+        {% if not if_auth['twitter'] %}
+        <a href="/auth/authorize/twitter">推特</a>
+        {% else %}
+        <a href="#/auth/revoke/twitter">推特 (取消授权)</a>
+        {% end %}
+      </li>
+    </ul>
+  </div>
+</div>
+{% end %}

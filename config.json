@@ -1,0 +1,20 @@
+{
+  "port": 3342,
+  "auth": {
+    "weibo": {
+      "client_id": "1915172640",
+      "client_secret": "9cb901cff8b5230be96a93437679fe73",
+      "redirect_uri": "u.oyiadin.com:3342/auth/callback/weibo"
+    },
+    "twitter": {
+      "consumer_key": "bK377sEIWRoQeVPbEQ0xkbBfO",
+      "consumer_secret": "cCoc1lJXfCWmn0k9qzmRlLgHDaiFD6Hyj4P2OXiO4m0EjKGEAz",
+      "callback": "http://u.oyiadin.com:3342/auth/callback/twitter"
+    }
+  },
+  "debug": true,
+  "cookie_secret": "reset me!",
+  "template_path": "views",
+  "connect_timeout": 2.5,
+  "request_timeout": 2.5
+}
