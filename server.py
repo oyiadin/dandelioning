@@ -1,4 +1,4 @@
-#coding=utf-8
+# coding=utf-8
 
 import time
 import random
@@ -14,16 +14,24 @@ import tornado.httpclient
 import tornado.gen
 from config import config
 
+
 class BaseHandler(tornado.web.RequestHandler):
     def quote(self, string):
         # The symbol '~' does not need to be replaced
         return urllib.quote(string, '~')
 
-    def httprequest(self, url, method, **kwargs):
+    def httprequest(self, url, method, provider, body='', **kwargs):
+        if provider in ('twitter',):
+            headers = self.oauth_header(
+                provider, method, url, **kwargs)
+        else:
+            headers = {}
+
         return tornado.httpclient.HTTPRequest(
-            url=url, method=method,
+            url=url, method=method, body=body,
+            headers=headers,
             connect_timeout=config['connect_timeout'],
-            request_timeout=config['request_timeout'], **kwargs)
+            request_timeout=config['request_timeout'])
 
     # Only OAuth 1.0 needs to send information in the http header
     def oauth_header(self, provider, method, base_url, token_secret='',
@@ -37,8 +45,10 @@ class BaseHandler(tornado.web.RequestHandler):
             'oauth_nonce': hex(random.getrandbits(64))[2:-1],
             'oauth_version': '1.0',
             'oauth_consumer_key': consumer_key,
+            # Now only support the HAMC-SHA1 method
             'oauth_signature_method': 'HMAC-SHA1',
-            'oauth_callback': callback }
+            'oauth_callback': callback
+        }
         kwargs.update(headers)
         headers = kwargs
 
@@ -49,19 +59,22 @@ class BaseHandler(tornado.web.RequestHandler):
         params_string = '&'.join(
             ['%s=%s' % (key, value) for key, value in params_list])
         base_string = '&'.join(
-            (method, self.quote(base_url), self.quote(params_string)) )
+            (method, self.quote(base_url), self.quote(params_string)))
 
         key = str(consumer_secret + '&' + token_secret)
         signature = hmac.new(key, base_string, hashlib.sha1) \
             .digest().encode('base64').rstrip()
+        del key
 
         headers['oauth_signature'] = signature
 
         header = 'OAuth ' + ', '.join([
-            '%s="%s"' % (self.quote(key), self.quote(headers[key])) \
-            for key in headers.keys()] )
+            '%s="%s"' % (self.quote(key), self.quote(headers[key]))
+            for key in headers.keys()])
 
+        # Will write into http header
         return {'Authorization': header}
+
 
 class IndexHandler(BaseHandler):
     def get(self):
@@ -72,10 +85,12 @@ class IndexHandler(BaseHandler):
 
         self.render('index.html', accounts=accounts)
 
+
 class AuthStepOneHandler(BaseHandler):
     @tornado.web.asynchronous
     @tornado.gen.engine
     def get(self, provider):
+        client = tornado.httpclient.AsyncHTTPClient()
         # OAuth 1.0
         if provider in ('twitter',):
             if provider == 'twitter':
@@ -83,12 +98,8 @@ class AuthStepOneHandler(BaseHandler):
                 url1 = url_prefix + 'request_token'
                 url2 = url_prefix + 'authorize'
 
-            client = tornado.httpclient.AsyncHTTPClient()
-            header = self.oauth_header(
-                provider=provider, method='POST', base_url=url1)
-
             request = self.httprequest(
-                url=url1, method='POST', headers=header, body='')
+                url=url1, method='POST', provider=provider)
             response = yield tornado.gen.Task(client.fetch, request)
 
             token = urlparse.parse_qs(response.body)
@@ -98,7 +109,7 @@ class AuthStepOneHandler(BaseHandler):
                 return
 
             qs = urllib.urlencode({
-                'oauth_token': token['oauth_token'][0]} )
+                'oauth_token': token['oauth_token'][0]})
 
             self.redirect(url2 + '?' + qs)
 
@@ -115,6 +126,8 @@ class AuthStepOneHandler(BaseHandler):
 
         else:
             self.write('unsupported provider')
+            self.finish()
+
 
 class CallbackHandler(BaseHandler):
     @tornado.web.asynchronous
@@ -129,14 +142,12 @@ class CallbackHandler(BaseHandler):
             oauth_token = self.get_argument('oauth_token')
             oauth_verifier = self.get_argument('oauth_verifier')
 
-            header = self.oauth_header(
-                provider=provider, method='POST', base_url=url,
+            request = self.httprequest(
+                url=url, method='POST', provider=provider,
                 oauth_token=oauth_token,
                 oauth_verifier=oauth_verifier)
-
-            request = self.httprequest(
-                url=url, method='POST', headers=header, body='')
             response = yield tornado.gen.Task(client.fetch, request)
+            print response.body
             token = urlparse.parse_qs(response.body)
 
             self.set_secure_cookie(
@@ -158,9 +169,10 @@ class CallbackHandler(BaseHandler):
                 client_id=config_auth['client_id'],
                 client_secret=config_auth['client_secret'],
                 redirect_uri=config_auth['redirect_uri'],
-                grant_type='authorization_code') )
+                grant_type='authorization_code'))
 
-            request = self.httprequest(url=url, method='POST', body=qs)
+            request = self.httprequest(
+                url=url, method='POST', provider=provider, body=qs)
             response = yield tornado.gen.Task(client.fetch, request)
             user = json.loads(response.body)
             expires = user['expires_in'] + time.time()
@@ -172,6 +184,7 @@ class CallbackHandler(BaseHandler):
 
         else:
             self.write('unsupported provider')
+            self.finish()
 
 routers = [
     ('/', IndexHandler),
