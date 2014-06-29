@@ -1,20 +1,27 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>dandelioning</title>
-	<meta charset="utf-8" />
+    <title>dandelioning</title>
+    <meta charset="utf-8" />
 </head>
 <body>
-	<ul>
-		{% for provider in accounts %}
-		<li>
-			{% if not accounts[provider] %}
-			<a href="/auth/1/{{ provider }}">绑定{{ provider }}帐号</a>
-			{% else %}
-			<a href="#">{{ provider }}(已绑定)</a>
-			{% end %}
-		</li>
-		{% end %}
-	</ul>
+<div id="main-container">
+    <div id="container">
+        <h1>彼告</h1>
+        <hr/>
+        <p>现支持的服务提供商：</p>
+        <ul>
+            {% for provider in accounts %}
+            <li>
+                {% if not accounts[provider] %}
+                <a href="/auth/1/{{ provider }}">绑定{{ provider }}帐号</a>
+                {% else %}
+                <span>{{ provider }}(已绑定)</a>
+                {% end %}
+            </li>
+            {% end %}
+        </ul>
+    </div>
+</div>
 </body>
 </html>

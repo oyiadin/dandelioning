@@ -1,0 +1,8 @@
+{
+  "oauth_version": "1.0",
+  "urls": {
+    "request_token" : "https://api.twitter.com/oauth/request_token",
+    "authorize": "https://api.twitter.com/oauth/authorize",
+    "access_token": "https://api.twitter.com/oauth/access_token"
+  }
+}

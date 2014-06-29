@@ -1,180 +1,75 @@
 # coding=utf-8
 
-import time
-import random
+import os
+import sys
 import urllib
-import urlparse
-import json
-import hmac
-import hashlib
+import time
 import tornado.httpserver
 import tornado.ioloop
 import tornado.web
 import tornado.httpclient
 import tornado.gen
+import actions
 from config import config
+from infos import infos
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+oauth_1_providers = ('twitter',)
+oauth_2_providers = ('weibo',)
+providers = oauth_1_providers + oauth_2_providers
 
 
-class BaseHandler(tornado.web.RequestHandler):
-    def quote(self, string):
-        # The symbol '~' does not need to be replaced
-        return urllib.quote(string, '~')
-
-    def httprequest(self, url, method, provider, body='', **kwargs):
-        if provider in ('twitter',):
-            headers = self.oauth_header(
-                provider, method, url, **kwargs)
-        else:
-            headers = {}
-
-        return tornado.httpclient.HTTPRequest(
-            url=url, method=method, body=body,
-            headers=headers,
-            connect_timeout=config['connect_timeout'],
-            request_timeout=config['request_timeout'])
-
-    # Only OAuth 1.0 needs to send information in the http header
-    def oauth_header(self, provider, method, base_url, token_secret='',
-                     **kwargs):
-        consumer_key = config['auth'][provider]['consumer_key']
-        consumer_secret = config['auth'][provider]['consumer_secret']
-        callback = config['auth'][provider]['callback']
-
-        headers = {
-            'oauth_timestamp': str(int(time.time())),
-            'oauth_nonce': hex(random.getrandbits(64))[2:-1],
-            'oauth_version': '1.0',
-            'oauth_consumer_key': consumer_key,
-            # Now only support the HAMC-SHA1 method
-            'oauth_signature_method': 'HMAC-SHA1',
-            'oauth_callback': callback
-        }
-        kwargs.update(headers)
-        headers = kwargs
-
-        params_list = []
-        for key in sorted(kwargs.keys()):
-            params_list.append(
-                (self.quote(key), self.quote(kwargs[key])))
-        params_string = '&'.join(
-            ['%s=%s' % (key, value) for key, value in params_list])
-        base_string = '&'.join(
-            (method, self.quote(base_url), self.quote(params_string)))
-
-        key = str(consumer_secret + '&' + token_secret)
-        signature = hmac.new(key, base_string, hashlib.sha1) \
-            .digest().encode('base64').rstrip()
-        del key
-
-        headers['oauth_signature'] = signature
-
-        header = 'OAuth ' + ', '.join([
-            '%s="%s"' % (self.quote(key), self.quote(headers[key]))
-            for key in headers.keys()])
-
-        # Will write into http header
-        return {'Authorization': header}
-
-
-class IndexHandler(BaseHandler):
+class IndexHandler(tornado.web.RequestHandler):
     def get(self):
         accounts = {}
-        for provider in ('twitter', 'weibo'):
+        for provider in providers:
             accounts[provider] = bool(
                 self.get_cookie(provider + '_token'))
 
         self.render('index.html', accounts=accounts)
 
 
-class AuthStepOneHandler(BaseHandler):
-    @tornado.web.asynchronous
-    @tornado.gen.engine
+class AuthStepOneHandler(tornado.web.RequestHandler):
     def get(self, provider):
-        client = tornado.httpclient.AsyncHTTPClient()
-        # OAuth 1.0
-        if provider in ('twitter',):
-            if provider == 'twitter':
-                url_prefix = 'https://api.twitter.com/oauth/'
-                url1 = url_prefix + 'request_token'
-                url2 = url_prefix + 'authorize'
+        if provider in oauth_1_providers:
+            token = actions.get_request_token(provider)
 
-            request = self.httprequest(
-                url=url1, method='POST', provider=provider)
-            response = yield tornado.gen.Task(client.fetch, request)
+            qs = urllib.urlencode({'oauth_token': token})
 
-            token = urlparse.parse_qs(response.body)
+            self.redirect(
+                infos[provider]['urls']['authorize'] + '?' + qs)
 
-            if not token.get('oauth_callback_confirmed'):
-                self.write('failed to get request token')
-                return
-
-            qs = urllib.urlencode({
-                'oauth_token': token['oauth_token'][0]})
-
-            self.redirect(url2 + '?' + qs)
-
-        # OAuth 2.0
-        elif provider in ('weibo',):
-            if provider == 'weibo':
-                url = 'https://api.weibo.com/oauth2/authorize'
-
+        elif provider in oauth_2_providers:
             qs = urllib.urlencode(dict(
                 client_id=config['auth'][provider]['client_id'],
                 redirect_uri=config['auth'][provider]['redirect_uri']))
 
-            self.redirect(url + '?' + qs)
+            self.redirect(
+                infos[provider]['urls']['authorize'] + '?' + qs)
 
         else:
             self.write('unsupported provider')
             self.finish()
 
 
-class CallbackHandler(BaseHandler):
-    @tornado.web.asynchronous
-    @tornado.gen.engine
+class CallbackHandler(tornado.web.RequestHandler):
     def get(self, provider):
-        # OAuth 1.0
-        client = tornado.httpclient.AsyncHTTPClient()
-        if provider in ('twitter',):
-            if provider == 'twitter':
-                url = 'https://api.twitter.com/oauth/access_token'
-
-            oauth_token = self.get_argument('oauth_token')
-            oauth_verifier = self.get_argument('oauth_verifier')
-
-            request = self.httprequest(
-                url=url, method='POST', provider=provider,
-                oauth_token=oauth_token,
-                oauth_verifier=oauth_verifier)
-            response = yield tornado.gen.Task(client.fetch, request)
-            print response.body
-            token = urlparse.parse_qs(response.body)
+        if provider in oauth_1_providers:
+            token = actions.get_access_token(
+                provider, self.get_argument)
 
             self.set_secure_cookie(
-                'twitter_token', token['oauth_token'][0])
+                'twitter_token', token['oauth_token'])
             self.set_secure_cookie(
-                'twitter_token_secret', token['oauth_token_secret'][0])
+                'twitter_token_secret', token['oauth_token_secret'])
 
             self.redirect('/')
 
-        # OAuth 2.0
-        elif provider in ('weibo',):
-            code = self.get_argument('code')
-            if provider == 'weibo':
-                url = 'https://api.weibo.com/oauth2/access_token'
+        elif provider in oauth_2_providers:
+            user = actions.get_access_token(
+                provider, self.get_argument)
 
-            config_auth = config['auth'][provider]
-            qs = urllib.urlencode(dict(
-                code=code,
-                client_id=config_auth['client_id'],
-                client_secret=config_auth['client_secret'],
-                redirect_uri=config_auth['redirect_uri'],
-                grant_type='authorization_code'))
-
-            request = self.httprequest(
-                url=url, method='POST', provider=provider, body=qs)
-            response = yield tornado.gen.Task(client.fetch, request)
-            user = json.loads(response.body)
             expires = user['expires_in'] + time.time()
 
             self.set_secure_cookie(
