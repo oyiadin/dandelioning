@@ -18,3 +18,16 @@ var/
 pip-log.txt
 pip-delete-this-directory.txt
 *~
+#PyCharm
+.idea
+
+#Unit test / coverage reports
+.coverage
+.tox
+
+#OS X
+.DS_Store
+
+#Virtualenv
+include/
+htmlcov
