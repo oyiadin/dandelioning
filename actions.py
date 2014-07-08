@@ -77,9 +77,9 @@ def _oauth_header(provider, method, base_url,
     return {'Authorization': header}
 
 
+# Body must not be None for POST request
 def _gen_request(body='', **kwargs):
     return tornado.httpclient.HTTPRequest(
-        # Body must not be None for POST request
         body=body,
         connect_timeout=config['connect_timeout'],
         request_timeout=config['request_timeout'], **kwargs)
@@ -95,13 +95,32 @@ def _oauth_1_request(url, method, provider, **kwargs):
     return _parse_qs(response.body)
 
 
-def _oauth_2_request(url, method, **kwargs):
+def _oauth_2_request(url, method, access_token='', **kwargs):
     qs = urllib.urlencode(kwargs)
+    header = {'Authorization': 'OAuth2 %s' % access_token} \
+        if access_token else {}
 
-    request = _gen_request(url=url, method=method, body=qs)
+    request = _gen_request(
+        url=url, method=method, headers=header, body=qs)
     response = client.fetch(request)
 
     return json.loads(response.body)
+
+
+def get_authorize_url(provider, token=''):
+    """OAuth 1.0 and 2.0
+    Returns an authorize url. The parameter `token` is required if
+    provider use OAuth 1.0."""
+
+    if provider in oauth_1_providers:
+        qs = urllib.urlencode({'oauth_token': token})
+        return infos[provider]['urls']['authorize'] + '?' + qs
+
+    elif provider in oauth_2_providers:
+        qs = urllib.urlencode(dict(
+            client_id=config['auth'][provider]['client_id'],
+            redirect_uri=config['auth'][provider]['redirect_uri']))
+        return infos[provider]['urls']['authorize'] + '?' + qs
 
 
 def get_request_token(provider):

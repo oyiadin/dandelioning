@@ -2,16 +2,13 @@
 
 import os
 import sys
-import urllib
 import time
 import tornado.httpserver
 import tornado.ioloop
 import tornado.web
 import tornado.httpclient
-import tornado.gen
 import actions
 from config import config
-from infos import infos
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -34,23 +31,13 @@ class AuthStepOneHandler(tornado.web.RequestHandler):
     def get(self, provider):
         if provider in oauth_1_providers:
             token = actions.get_request_token(provider)
-
-            qs = urllib.urlencode({'oauth_token': token})
-
-            self.redirect(
-                infos[provider]['urls']['authorize'] + '?' + qs)
-
         elif provider in oauth_2_providers:
-            qs = urllib.urlencode(dict(
-                client_id=config['auth'][provider]['client_id'],
-                redirect_uri=config['auth'][provider]['redirect_uri']))
-
-            self.redirect(
-                infos[provider]['urls']['authorize'] + '?' + qs)
-
+            token = ''
         else:
             self.write('unsupported provider')
             self.finish()
+
+        self.redirect(actions.get_authorize_url(provider, token=token))
 
 
 class CallbackHandler(tornado.web.RequestHandler):
