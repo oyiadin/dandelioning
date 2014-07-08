@@ -8,7 +8,7 @@ import tornado.httpclient
 from infos import infos
 from config import config
 
-__all__ = ['get_request_token', 'get_access_token']
+__all__ = ['get_request_token', 'get_access_token', 'update']
 
 oauth_1_providers = ('twitter',)
 oauth_2_providers = ('weibo',)
@@ -37,7 +37,6 @@ def _oauth_header(provider, method, base_url,
                   token_secret='', **kwargs):
     consumer_key = config['auth'][provider]['consumer_key']
     consumer_secret = config['auth'][provider]['consumer_secret']
-    callback = config['auth'][provider]['callback']
 
     headers = {
         'oauth_timestamp': str(int(time.time())),
@@ -46,7 +45,6 @@ def _oauth_header(provider, method, base_url,
         'oauth_consumer_key': consumer_key,
         # Now only support the HAMC-SHA1 method
         'oauth_signature_method': 'HMAC-SHA1',
-        'oauth_callback': callback
     }
     kwargs.update(headers)
     headers = kwargs
@@ -85,14 +83,29 @@ def _gen_request(body='', **kwargs):
         request_timeout=config['request_timeout'], **kwargs)
 
 
-def _oauth_1_request(url, method, provider, **kwargs):
-    header = _oauth_header(provider, method, url, **kwargs)
+def _oauth_1_request(url, method, provider,
+                     access=[], header_keys={}, **kwargs):
+    if access:
+        header_keys['oauth_token'] = access[0][provider]
+        token_secret = access[1][provider]
+    else:
+        token_secret = ''
+
+    header_keys.update(kwargs)
+    header = _oauth_header(
+        provider, method, url,
+        token_secret=token_secret, **header_keys)
+
+    qs = urllib.urlencode(kwargs)
 
     request = _gen_request(
-        url=url, method=method, headers=header)
+        url=url, method=method, headers=header, body=qs)
     response = client.fetch(request)
 
-    return _parse_qs(response.body)
+    if access:
+        return json.loads(response.body)
+    else:
+        return _parse_qs(response.body)
 
 
 def _oauth_2_request(url, method, access_token='', **kwargs):
@@ -100,8 +113,14 @@ def _oauth_2_request(url, method, access_token='', **kwargs):
     header = {'Authorization': 'OAuth2 %s' % access_token} \
         if access_token else {}
 
+    if method == 'GET':
+        url = url + '?' + qs
+        body = ''
+    elif method == 'POST':
+        body = qs
+
     request = _gen_request(
-        url=url, method=method, headers=header, body=qs)
+        url=url, method=method, headers=header, body=body)
     response = client.fetch(request)
 
     return json.loads(response.body)
@@ -124,13 +143,16 @@ def get_authorize_url(provider, token=''):
 
 
 def get_request_token(provider):
-    """OAuth 1.0
+    """OAuth 1.0 Only
     Request for a request_token and return it. And will return False
     if it fails."""
 
     token = _oauth_1_request(
         url=infos[provider]['urls']['request_token'],
-        method='POST', provider=provider)
+        method='POST', provider=provider,
+        header_keys={
+            'oauth_callback': config['auth'][provider]['callback']
+        })
 
     if not token.get('oauth_callback_confirmed'):
         return False
@@ -138,16 +160,18 @@ def get_request_token(provider):
 
 
 def get_access_token(provider, get_argument):
-    """OAuth 1.0 and 2.0
-    Request for an access_token. Will return a dictionary which is
+    """Request for an access_token. Will return a dictionary which is
     paresd from HTTP response body."""
 
     if provider in oauth_1_providers:
         return _oauth_1_request(
             url=infos[provider]['urls']['access_token'],
             method='POST', provider=provider,
-            oauth_token=get_argument('oauth_token'),
-            oauth_verifier=get_argument('oauth_verifier'))
+            header_keys={
+                'oauth_token': get_argument('oauth_token'),
+                'oauth_verifier': get_argument('oauth_verifier'),
+                'oauth_callback': config['auth'][provider]['callback']
+            })
 
     else:
         auth_config = config['auth'][provider]
@@ -161,3 +185,34 @@ def get_access_token(provider, get_argument):
         return _oauth_2_request(
             url=infos[provider]['urls']['access_token'],
             method='POST', **args)
+
+
+def update(tokens, secrets, status):
+    """Update a new status on providers which we have token. Return
+    None if the action succeed."""
+
+    for provider in tokens:
+        if provider == 'twitter':
+            if len(status) > infos['twitter']['status_max_length']:
+                return 'Length of status is too long for twitter.'
+
+            response = _oauth_1_request(
+                url=infos['twitter']['urls']['update'],
+                method='POST', provider='twitter',
+                access=(tokens, secrets),
+                status=status)
+
+            if not response['id']:
+                return 'Something went wrong.'
+
+        elif provider == 'weibo':
+            if len(status) > infos['weibo']['status_max_length']:
+                return 'Length of status is too long for weibo.'
+
+            response = _oauth_2_request(
+                url=infos['weibo']['urls']['update'],
+                method='POST', access_token=tokens['weibo'],
+                status=status)
+
+            if not response['id']:
+                return 'Something went wrong.'

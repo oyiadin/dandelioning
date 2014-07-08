@@ -1,5 +1,6 @@
 {
   "port": 3342,
+  "domain": "u.oyiadin.com",
   "auth": {
     "weibo": {
       "client_id": "1915172640",
