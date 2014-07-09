@@ -16,9 +16,9 @@ oauth_2_providers = ('weibo',)
 client = tornado.httpclient.HTTPClient()
 
 
-def _quote(string):
+def _quote(qs):
     # The symbol '~' does not need to be replaced
-    return urllib.quote(string, '~')
+    return urllib.quote(str(qs), '~')
 
 
 def _parse_qs(qs):
@@ -31,14 +31,14 @@ def _parse_qs(qs):
     return qs_dict
 
 
-# Only OAuth 1.0 needs to send information in the http header
 # By default, token_secret will be set to ''.
 def _oauth_header(provider, method, base_url,
-                  token_secret='', **kwargs):
+                  token_secret='', oauth_headers={}, **kwargs):
+    headers = kwargs
     consumer_key = config['auth'][provider]['consumer_key']
     consumer_secret = config['auth'][provider]['consumer_secret']
 
-    headers = {
+    default_headers = {
         'oauth_timestamp': str(int(time.time())),
         'oauth_nonce': hex(random.getrandbits(64))[2:-1],
         'oauth_version': '1.0',
@@ -46,30 +46,31 @@ def _oauth_header(provider, method, base_url,
         # Now only support the HAMC-SHA1 method
         'oauth_signature_method': 'HMAC-SHA1',
     }
-    kwargs.update(headers)
-    headers = kwargs
+    oauth_headers.update(default_headers)
+    headers.update(oauth_headers)
 
     params_list = []
-    for key in sorted(kwargs.keys()):
+    for key in sorted(headers.keys()):
         params_list.append(
-            (_quote(key), _quote(kwargs[key])))
+            (_quote(key), _quote(headers[key])))
     params_string = '&'.join(
         ['%s=%s' % (key, value) for key, value in params_list])
+
     base_string = '&'.join((
         method,
         _quote(base_url),
         _quote(params_string)))
 
-    key = str(consumer_secret + '&' + token_secret)
+    key = str(_quote(consumer_secret) + '&' + _quote(token_secret))
     signature = hmac.new(key, base_string, hashlib.sha1) \
         .digest().encode('base64').rstrip()
     del key
 
-    headers['oauth_signature'] = signature
+    oauth_headers['oauth_signature'] = signature
 
     header = 'OAuth ' + ', '.join([
-        '%s="%s"' % (_quote(key), _quote(headers[key]))
-        for key in headers.keys()])
+        '%s="%s"' % (_quote(key), _quote(oauth_headers[key]))
+        for key in oauth_headers.keys()])
 
     # Will write into http header
     return {'Authorization': header}
@@ -84,17 +85,17 @@ def _gen_request(body='', **kwargs):
 
 
 def _oauth_1_request(url, method, provider,
-                     access=[], header_keys={}, **kwargs):
+                     access=[], oauth_headers={}, **kwargs):
     if access:
-        header_keys['oauth_token'] = access[0][provider]
+        oauth_headers['oauth_token'] = access[0][provider]
         token_secret = access[1][provider]
     else:
         token_secret = ''
 
-    header_keys.update(kwargs)
     header = _oauth_header(
         provider, method, url,
-        token_secret=token_secret, **header_keys)
+        token_secret=token_secret, oauth_headers=oauth_headers,
+        **kwargs)
 
     qs = urllib.urlencode(kwargs)
 
@@ -150,7 +151,7 @@ def get_request_token(provider):
     token = _oauth_1_request(
         url=infos[provider]['urls']['request_token'],
         method='POST', provider=provider,
-        header_keys={
+        oauth_headers={
             'oauth_callback': config['auth'][provider]['callback']
         })
 
@@ -167,7 +168,7 @@ def get_access_token(provider, get_argument):
         return _oauth_1_request(
             url=infos[provider]['urls']['access_token'],
             method='POST', provider=provider,
-            header_keys={
+            oauth_headers={
                 'oauth_token': get_argument('oauth_token'),
                 'oauth_verifier': get_argument('oauth_verifier'),
                 'oauth_callback': config['auth'][provider]['callback']
@@ -187,14 +188,16 @@ def get_access_token(provider, get_argument):
             method='POST', **args)
 
 
-def update(tokens, secrets, status):
+def update(tokens, secrets, qs):
     """Update a new status on providers which we have token. Return
     None if the action succeed."""
 
+    query = _parse_qs(qs)
+    status = unicode(query['status'])
     for provider in tokens:
         if provider == 'twitter':
             if len(status) > infos['twitter']['status_max_length']:
-                return 'Length of status is too long for twitter.'
+                return 'Too long for twitter.'
 
             response = _oauth_1_request(
                 url=infos['twitter']['urls']['update'],
@@ -207,7 +210,7 @@ def update(tokens, secrets, status):
 
         elif provider == 'weibo':
             if len(status) > infos['weibo']['status_max_length']:
-                return 'Length of status is too long for weibo.'
+                return 'Too long for weibo.'
 
             response = _oauth_2_request(
                 url=infos['weibo']['urls']['update'],

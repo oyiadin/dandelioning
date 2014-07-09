@@ -12,6 +12,8 @@ import tornado.websocket
 import actions
 from config import config
 
+reload(sys)
+sys.setdefaultencoding('UTF-8')
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 oauth_1_providers = ('twitter',)
@@ -23,10 +25,10 @@ del config_without_auth['auth']
 
 
 class BaseHandler(tornado.web.RequestHandler):
-    def get(self):
-        self.write('POST method is not supported.')
+    def get(self, path=''):
+        self.write('GET method is not supported.')
 
-    def post(self):
+    def post(self, path=''):
         self.write('POST method is not supported.')
 
     def get_tokens(self):
@@ -120,9 +122,9 @@ class APIHandler(BaseHandler):
         if action == 'update':
             tokens = self.get_tokens()
             secrets = self.get_secrets()
-            status = unicode(self.get_header('status'))
 
-            err_msg = actions.update(tokens, secrets, status=status)
+            err_msg = actions.update(
+                tokens, secrets, qs=self.request.body)
             if not err_msg:
                 self._write()
             else:
@@ -130,6 +132,7 @@ class APIHandler(BaseHandler):
 
         else:
             self._error('Unknown action.')
+
 
 routers = [
     ('/', IndexHandler),
