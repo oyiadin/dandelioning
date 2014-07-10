@@ -2,14 +2,14 @@
   "port": 3342,
   "auth": {
     "weibo": {
-      "client_id": "1915172640",
-      "client_secret": "9cb901cff8b5230be96a93437679fe73",
-      "redirect_uri": "d.ipotato.me/auth/callback/weibo"
+      "client_id": "...",
+      "client_secret": "...",
+      "redirect_uri": "your_domain/auth/callback/weibo"
     },
     "twitter": {
-      "consumer_key": "bK377sEIWRoQeVPbEQ0xkbBfO",
-      "consumer_secret": "cCoc1lJXfCWmn0k9qzmRlLgHDaiFD6Hyj4P2OXiO4m0EjKGEAz",
-      "callback": "http://d.ipotato.me/auth/callback/twitter"
+      "consumer_key": "...",
+      "consumer_secret": "...",
+      "callback": "http://yourdomain/auth/callback/twitter"
     }
   },
   "debug": true,
