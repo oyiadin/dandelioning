@@ -101,7 +101,10 @@ def _oauth_1_request(url, method, provider,
 
     request = _gen_request(
         url=url, method=method, headers=header, body=qs)
-    response = client.fetch(request)
+    try:
+        response = client.fetch(request)
+    except tornado.httpclient.HTTPError, message:
+        return {'err_msg': str(message)}
 
     if access:
         return json.loads(response.body)
@@ -122,7 +125,10 @@ def _oauth_2_request(url, method, access_token='', **kwargs):
 
     request = _gen_request(
         url=url, method=method, headers=header, body=body)
-    response = client.fetch(request)
+    try:
+        response = client.fetch(request)
+    except tornado.httpclient.HTTPError, message:
+        return {'err_msg': str(message)}
 
     return json.loads(response.body)
 
@@ -205,8 +211,9 @@ def update(tokens, secrets, qs):
                 access=(tokens, secrets),
                 status=status)
 
-            if not response['id']:
-                return 'Something went wrong.'
+            if not response.get('id'):
+                return response.get('err_msg') \
+                    or 'Something went wrong.'
 
         elif provider == 'weibo':
             if len(status) > infos['weibo']['status_max_length']:
@@ -217,5 +224,6 @@ def update(tokens, secrets, qs):
                 method='POST', access_token=tokens['weibo'],
                 status=status)
 
-            if not response['id']:
-                return 'Something went wrong.'
+            if not response.get('id'):
+                return response.get('err_msg') \
+                    or 'Something went wrong.'

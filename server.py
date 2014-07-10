@@ -111,12 +111,12 @@ class CallbackHandler(BaseHandler):
 
 
 class APIHandler(BaseHandler):
-    def _write(self, code='200', message='', **kwargs):
+    def _write(self, action='', message='', code='200', **kwargs):
         self.write(dict(
-            code=code, message=message, **kwargs))
+            code=code, message=message, action=action, **kwargs))
 
-    def _error(self, message, code='400', **kwargs):
-        self._write(message, code, **kwargs)
+    def _error(self, message='', action='', code='400', **kwargs):
+        self._write(action, message, code, **kwargs)
 
     def post(self, action):
         if action == 'update':
@@ -126,9 +126,9 @@ class APIHandler(BaseHandler):
             err_msg = actions.update(
                 tokens, secrets, qs=self.request.body)
             if not err_msg:
-                self._write()
+                self._write('update')
             else:
-                self._error(err_msg)
+                self._error(err_msg, 'update')
 
         else:
             self._error('Unknown action.')

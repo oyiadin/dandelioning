@@ -92,8 +92,12 @@
             if (request.readyState == 4) {
                 data = JSON.parse(request.responseText);
                 console.log(data);
-                if (data['code'] !== '200') {
-                    alert(data['message']);
+                if (data['code'] === '200') {
+                    if (data['action'] === 'update') {
+                        document.getElementById('new-status').value = '';
+                    }
+                } else {
+                    alert(data['action'] + ':\n' + data['message']);
                 }
             }
         };
