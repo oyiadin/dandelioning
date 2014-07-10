@@ -45,6 +45,7 @@
             margin-left: 0;
         }
         #new-status-control {
+            margin-top: 0.5em;
             height: 1.5em;
         }
         #new-status-control a {
@@ -65,6 +66,15 @@
         }
         textarea#new-status:focus {
             height: 8em; /* 6 lines */
+        }
+        #footer {
+            margin-top: 7em;
+            font-size: 0.5em;
+            line-height: 1.5em;
+            text-align: center;
+        }
+        #footer span {
+            margin: 0 7px;
         }
         .container {
             max-width: 720px;
@@ -142,6 +152,14 @@
         <a class="right" onclick="update();">&raquo;发布</a>
     </div>
     <textarea id="new-status" placeholder="在这里键入你想发布的文字"></textarea>
+    <div id="footer">
+        <span>
+            <a href="https://github.com/oyiadin/dandelioning/issues/new" target="_blank">&raquo;报告问题</a>
+        </span>
+        <span>
+            <a href="https://github.com/oyiadin/dandelioning" target="_blank">&raquo;本站源码</a>
+        </span>
+    </div>
 </div>
 </body>
 </html>
