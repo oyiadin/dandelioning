@@ -8,20 +8,32 @@ import tornado.httpclient
 from infos import infos
 from config import config
 
-__all__ = ['get_request_token', 'get_access_token', 'update']
+__all__ = ['Error', 'get_request_token', 'get_access_token', 'update']
 
-oauth_1_providers = ('twitter',)
-oauth_2_providers = ('weibo',)
+oauth_1_providers = infos['oauth_1_providers']
+oauth_2_providers = infos['oauth_2_providers']
 
 client = tornado.httpclient.HTTPClient()
 
 
+class Error(Exception):
+    def __init__(self, err_msg='Something went wrong.'):
+        self.err_msg = str(err_msg)
+
+    @classmethod
+    def err_msg(self):
+        return self.err_msg
+
+
 def _quote(qs):
+    """ 'a&b' ----> 'a%26b' """
     # The symbol '~' does not need to be replaced
     return urllib.quote(str(qs), '~')
 
 
 def _parse_qs(qs):
+    """ 'foo=bar&baz=%26' ----> {'foo': 'bar', 'baz': '&'} """
+
     qs_dict = {}
 
     for pair in qs.split('&'):
@@ -34,6 +46,8 @@ def _parse_qs(qs):
 # By default, token_secret will be set to ''.
 def _oauth_header(provider, method, base_url,
                   token_secret='', oauth_headers={}, **kwargs):
+    """Generate an OAuth header for OAuth version 1.0. Returns a dictionary."""
+
     headers = kwargs
     consumer_key = config['auth'][provider]['consumer_key']
     consumer_secret = config['auth'][provider]['consumer_secret']
@@ -78,6 +92,8 @@ def _oauth_header(provider, method, base_url,
 
 # Body must not be None for POST request
 def _gen_request(body='', **kwargs):
+    """Generate a tornado.httpclient.HTTPRequest instance and set
+    timeout automatically."""
     return tornado.httpclient.HTTPRequest(
         body=body,
         connect_timeout=config['connect_timeout'],
@@ -86,6 +102,7 @@ def _gen_request(body='', **kwargs):
 
 def _oauth_1_request(url, method, provider,
                      access=[], oauth_headers={}, **kwargs):
+    # `access` ----> (tokens, secrets)
     if access:
         oauth_headers['oauth_token'] = access[0][provider]
         token_secret = access[1][provider]
@@ -104,7 +121,7 @@ def _oauth_1_request(url, method, provider,
     try:
         response = client.fetch(request)
     except tornado.httpclient.HTTPError, message:
-        return {'err_msg': str(message)}
+        return Error(message)
 
     if access:
         return json.loads(response.body)
@@ -113,6 +130,7 @@ def _oauth_1_request(url, method, provider,
 
 
 def _oauth_2_request(url, method, access_token='', **kwargs):
+    # Notice that it doesn't need to be passed on `provider`.
     qs = urllib.urlencode(kwargs)
     header = {'Authorization': 'OAuth2 %s' % access_token} \
         if access_token else {}
@@ -128,7 +146,7 @@ def _oauth_2_request(url, method, access_token='', **kwargs):
     try:
         response = client.fetch(request)
     except tornado.httpclient.HTTPError, message:
-        return {'err_msg': str(message)}
+        return Error(message)
 
     return json.loads(response.body)
 
@@ -136,7 +154,7 @@ def _oauth_2_request(url, method, access_token='', **kwargs):
 def get_authorize_url(provider, token=''):
     """OAuth 1.0 and 2.0
     Returns an authorize url. The parameter `token` is required if
-    provider use OAuth 1.0."""
+    provider uses OAuth 1.0."""
 
     if provider in oauth_1_providers:
         qs = urllib.urlencode({'oauth_token': token})
@@ -151,23 +169,26 @@ def get_authorize_url(provider, token=''):
 
 def get_request_token(provider):
     """OAuth 1.0 Only
-    Request for a request_token and return it. And will return False
-    if it fails."""
+    Request for a request_token and return it."""
 
-    token = _oauth_1_request(
+    response = _oauth_1_request(
         url=infos[provider]['urls']['request_token'],
         method='POST', provider=provider,
         oauth_headers={
             'oauth_callback': config['auth'][provider]['callback']
         })
 
-    if not token.get('oauth_callback_confirmed'):
-        return False
-    return token['oauth_token']
+    if isinstance(response, Error):
+        return response
+    if not response.get('oauth_callback_confirmed'):
+        return Error()
+
+    return response['oauth_token']
 
 
 def get_access_token(provider, get_argument):
-    """Request for an access_token. Will return a dictionary which is
+    """OAuth 1.0 and 2.0
+    Request for an access_token. Will return a dictionary which is
     paresd from HTTP response body."""
 
     if provider in oauth_1_providers:
@@ -195,15 +216,15 @@ def get_access_token(provider, get_argument):
 
 
 def update(tokens, secrets, qs):
-    """Update a new status on providers which we have token. Return
-    None if the action succeed."""
+    """Update a new status on providers which user have already logged
+    in."""
 
     query = _parse_qs(qs)
     status = unicode(query['status'])
     for provider in tokens:
         if provider == 'twitter':
             if len(status) > infos['twitter']['status_max_length']:
-                return 'Too long for twitter.'
+                return Error('Too long for twitter.')
 
             response = _oauth_1_request(
                 url=infos['twitter']['urls']['update'],
@@ -211,19 +232,19 @@ def update(tokens, secrets, qs):
                 access=(tokens, secrets),
                 status=status)
 
-            if not response.get('id'):
-                return response.get('err_msg') \
-                    or 'Something went wrong.'
-
         elif provider == 'weibo':
             if len(status) > infos['weibo']['status_max_length']:
-                return 'Too long for weibo.'
+                return Error('Too long for weibo.')
 
             response = _oauth_2_request(
                 url=infos['weibo']['urls']['update'],
                 method='POST', access_token=tokens['weibo'],
                 status=status)
 
-            if not response.get('id'):
-                return response.get('err_msg') \
-                    or 'Something went wrong.'
+        else:
+            return Error('Unsupported provider: %s' % provider)
+
+        if isinstance(response, Error):
+            return response
+        if not response.get('id'):
+            return Error()

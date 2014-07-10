@@ -1,15 +1,16 @@
 import os
 import json
 
-os.chdir('infos')
-
 __all__ = ['infos']
 infos = {}
 
-providers_list = ['twitter', 'weibo']
+files_list = ['providers', 'twitter', 'weibo']
 
-for provider in providers_list:
-    data = open(provider + '.json').read()
-    infos[provider] = json.loads(data)
+for file in files_list:
+    infos[file] = json.load(
+        open(os.path.join('infos', file + '.json')))
 
-os.chdir('..')
+infos['oauth_1_providers'] = infos['providers']['oauth_1']
+infos['oauth_2_providers'] = infos['providers']['oauth_2']
+infos['providers'] = \
+    infos['oauth_1_providers'] + infos['oauth_2_providers']

@@ -11,14 +11,15 @@ import tornado.httpclient
 import tornado.websocket
 import actions
 from config import config
+from infos import infos
 
 reload(sys)
 sys.setdefaultencoding('UTF-8')
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-oauth_1_providers = ('twitter',)
-oauth_2_providers = ('weibo',)
-providers = oauth_1_providers + oauth_2_providers
+oauth_1_providers = infos['oauth_1_providers']
+oauth_2_providers = infos['oauth_2_providers']
+providers = infos['providers']
 
 config_without_auth = copy.copy(config)
 del config_without_auth['auth']
@@ -31,36 +32,39 @@ class BaseHandler(tornado.web.RequestHandler):
     def post(self, path=''):
         self.write('POST method is not supported.')
 
-    def get_tokens(self):
-        tokens = {}
-        for provider in providers:
-            value = self.get_secure_cookie(provider + '_token')
-            if value:
-                tokens[provider] = value
+    def get_something(self, type):
+        if type == 'tokens':
+            suffix = '_token'
+        elif type == 'secrets':
+            suffix = '_token_secret'
 
-        return tokens
+        dict = {}
+        for provider in providers:
+            value = self.get_secure_cookie(provider + suffix)
+            if value:
+                dict[provider] = value
+
+        return dict
+
+    def get_tokens(self):
+        return self.get_something('tokens')
 
     def get_secrets(self):
-        secrets = {}
-        for provider in oauth_1_providers:
-            value = self.get_secure_cookie(provider + '_token_secret')
-            if value:
-                secrets[provider] = value
-
-        return secrets
+        return self.get_something('secrets')
 
     def render(self, template_name, **kwargs):
         accounts = {}
         for provider in providers:
-            accounts[provider] = bool(self.get_cookie(
-                provider + '_token'))
+            value = self.get_secure_cookie(provider + '_token')
+            accounts[provider] = value
 
         super(BaseHandler, self).render(
             template_name,
             config=config_without_auth, accounts=accounts)
 
-    def get_header(self, name, default_value=None):
-        return self.request.headers.get(name, default_value)
+    def error_not_supported(self, err_type='provider'):
+        err_type = err_type.capitalize()
+        self.write('%s is not supported.' % err_type)
 
 
 class IndexHandler(BaseHandler):
@@ -70,65 +74,82 @@ class IndexHandler(BaseHandler):
 
 class AuthStepOneHandler(BaseHandler):
     def get(self, provider):
-        if provider in oauth_1_providers:
-            token = actions.get_request_token(provider)
-        elif provider in oauth_2_providers:
-            token = ''
-        else:
-            self.write('unsupported provider')
-            self.finish()
+        if self.get_cookie(provider + '_token'):
+            self.redirect('/')
+            return
 
-        self.redirect(actions.get_authorize_url(provider, token=token))
+        if provider in oauth_1_providers:
+            res = actions.get_request_token(provider)
+        elif provider in oauth_2_providers:
+            res = ''
+        else:
+            self.error_not_supported()
+
+        if isinstance(res, actions.Error):
+            self.write(res.err_msg)
+            return
+        else:
+            # For OAuth 2.0, the parameter `token` can be empty.
+            self.redirect(
+                actions.get_authorize_url(provider, token=res))
 
 
 class CallbackHandler(BaseHandler):
     def get(self, provider):
         if provider in oauth_1_providers:
-            token = actions.get_access_token(
+            res = actions.get_access_token(
                 provider, self.get_argument)
 
-            self.set_secure_cookie(
-                'twitter_token', token['oauth_token'])
-            self.set_secure_cookie(
-                'twitter_token_secret', token['oauth_token_secret'])
-
-            self.redirect('/')
+            if isinstance(res, actions.Error):
+                self.write(res.err_msg)
+                return
+            else:
+                self.set_secure_cookie(
+                    'twitter_token', res['oauth_token'])
+                self.set_secure_cookie(
+                    'twitter_token_secret', res['oauth_token_secret'])
 
         elif provider in oauth_2_providers:
-            user = actions.get_access_token(
+            res = actions.get_access_token(
                 provider, self.get_argument)
 
-            expires = user['expires_in'] + time.time()
+            if isinstance(res, actions.Error):
+                self.write(res.err_msg)
+                return
+            else:
+                expires = res['expires_in'] + time.time()
 
-            self.set_secure_cookie(
-                'weibo_token', user['access_token'], expires=expires)
-
-            self.redirect('/')
+                self.set_secure_cookie(
+                    'weibo_token',
+                    res['access_token'], expires=expires)
 
         else:
-            self.write('unsupported provider')
-            self.finish()
+            self.error_not_supported()
+            return
+
+        self.redirect('/')
 
 
 class APIHandler(BaseHandler):
-    def _write(self, action='', message='', code='200', **kwargs):
+    def _write(self, action='', code='200', **kwargs):
         self.write(dict(
-            code=code, message=message, action=action, **kwargs))
+            code=code, action=action, **kwargs))
 
     def _error(self, message='', action='', code='400', **kwargs):
-        self._write(action, message, code, **kwargs)
+        self._write(action, code, message=message, **kwargs)
 
     def post(self, action):
         if action == 'update':
             tokens = self.get_tokens()
             secrets = self.get_secrets()
 
-            err_msg = actions.update(
+            res = actions.update(
                 tokens, secrets, qs=self.request.body)
-            if not err_msg:
-                self._write('update')
+            if isinstance(res, actions.Error):
+                self._error(res.err_msg, action)
+                return
             else:
-                self._error(err_msg, 'update')
+                self._write(action)
 
         else:
             self._error('Unknown action.')
@@ -148,4 +169,4 @@ if __name__ == '__main__':
     try:
         tornado.ioloop.IOLoop.instance().start()
     except KeyboardInterrupt:
-        pass
+        print 'Got a KeyboardInterrupt exception, exit now.'

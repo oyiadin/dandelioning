@@ -15,6 +15,6 @@
   "debug": true,
   "cookie_secret": "reset me!",
   "template_path": "views",
-  "connect_timeout": 1500,
-  "request_timeout": 1500
+  "connect_timeout": 1.5,
+  "request_timeout": 1.5
 }
