@@ -135,7 +135,7 @@ class CallbackHandler(BaseHandler):
 class RevokeHandler(BaseHandler):
     def get(self, provider):
         if provider == 'all':
-            self.clear_all_cookie()
+            self.clear_all_cookies()
         else:
             if provider in providers:
                 if provider in oauth_1_providers:
