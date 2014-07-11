@@ -8,7 +8,7 @@ import tornado.httpserver
 import tornado.ioloop
 import tornado.web
 import tornado.httpclient
-import tornado.websocket
+import tornado.log
 import actions
 from config import config
 from infos import infos
@@ -23,6 +23,8 @@ providers = infos['providers']
 
 config_without_auth = copy.copy(config)
 del config_without_auth['auth']
+
+tornado.log.enable_pretty_logging()
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -130,6 +132,20 @@ class CallbackHandler(BaseHandler):
         self.redirect('/')
 
 
+class RevokeHandler(BaseHandler):
+    def get(self, provider):
+        if provider == 'all':
+            self.clear_all_cookie()
+        else:
+            if provider in providers:
+                if provider in oauth_1_providers:
+                    self.clear_cookie(provider + '_token_secret')
+                self.clear_cookie(provider + '_token')
+
+        self.redirect('/')
+    # Haven't finished yet.
+
+
 class APIHandler(BaseHandler):
     def _write(self, action='', code='200', **kwargs):
         self.write(dict(
@@ -159,6 +175,7 @@ routers = [
     ('/', IndexHandler),
     ('/auth/1/(.*?)', AuthStepOneHandler),
     ('/auth/callback/(.*?)', CallbackHandler),
+    ('/auth/revoke/(.*?)', RevokeHandler),
     ('/_/(.*?)', APIHandler),
 ]
 application = tornado.web.Application(routers, **config)
