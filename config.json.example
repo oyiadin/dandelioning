@@ -15,6 +15,13 @@
   "debug": true,
   "cookie_secret": "reset me!",
   "template_path": "views",
+  "proxy": {
+    "proxy_host": null,
+    "proxy_port": null,
+    "proxy_username": null,
+    "proxy_password": null
+  },
+  "enable_proxy": false,
   "connect_timeout": 1.5,
   "request_timeout": 1.5
 }

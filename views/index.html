@@ -20,7 +20,7 @@
         a:visited {
             color: #666;
         }
-        a:hover { color: #08C; text-shadow: 0 0 8px #9AA; }
+        a:hover { color: #08C; text-shadow: 0 0 8px gray }
         a:active { color: #2B8; }
         #topbar {
             height: 1.6em;
@@ -43,6 +43,12 @@
         }
         ul#accounts li:first-child {
             margin-left: 0;
+        }
+        ul#accounts li#clear-accounts {
+            float: right;
+        }
+        ul#accounts li#clear-accounts a {
+            color: #633;
         }
         #new-status-control {
             margin-top: 0.5em;
@@ -102,9 +108,13 @@
             if (request.readyState == 4) {
                 data = JSON.parse(request.responseText);
                 console.log(data);
+
                 if (data['code'] === '200') {
                     if (data['action'] === 'update') {
                         document.getElementById('new-status').value = '';
+                    } else if (data['action'] === 'clear_accounts') {
+                        alert('清除账户信息成功！');
+                        window.location.href = '/';
                     }
                 } else {
                     alert(data['action'] + ':\n' + data['message']);
@@ -128,6 +138,12 @@
             send_request('/_/update', qs);
         }
     }
+
+    function clear_accounts() {
+        if (confirm("确定清除所有账户信息？") === true) {
+            send_request('/_/clear_accounts');
+        }
+    }
 </script>
 <div id="topbar">
     <ul id="accounts" class="container">
@@ -144,6 +160,9 @@
             {% else %}
             <span>微博</span>
             {% end if %}
+        </li>
+        <li id="clear-accounts">
+            <a href="#" onclick="clear_accounts();">&raquo;清除</a>
         </li>
     </ul>
 </div>
