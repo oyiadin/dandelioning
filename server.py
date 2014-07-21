@@ -303,6 +303,9 @@ class APIHandler(BaseHandler):
 
                     responses[provider] = response.body
 
+            self.finish(action, **responses)
+            return
+
         elif action == 'clear_accounts':
             self.clear_all_cookies()
 
@@ -310,7 +313,7 @@ class APIHandler(BaseHandler):
             self.error('Unknown action.')
             return
 
-        self.finish(action, **responses)
+        self.finish(action)
 
 
 routers = [
