@@ -97,7 +97,7 @@ class Request(object):
         dictionary which can be writen into HTTP Header."""
 
         if oauth_version == OAUTH_2:
-            return {'Authorization': 'OAuth %s' % self.token} \
+            return {'Authorization': 'OAuth2 %s' % self.token} \
                 if self.token else {}
 
         consumer_key = self.auth['consumer_key']
