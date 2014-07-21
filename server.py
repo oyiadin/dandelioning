@@ -192,7 +192,7 @@ class Request(object):
             oauth_version = OAUTH_2
 
         return self._gen_request(
-            oauth_version, self.urls['update'], POST, status=status)
+            oauth_version, self.urls['update'], POST, {}, status=status)
 
 
 class IndexHandler(BaseHandler):
