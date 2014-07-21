@@ -31,11 +31,11 @@ client = tornado.httpclient.AsyncHTTPClient()
 class BaseHandler(tornado.web.RequestHandler):
     def get(self, path=''):
         self.write('GET method is not supported for this path.')
-        self.finish()
+        super(BaseHandler, self).finish()
 
     def post(self, path=''):
         self.write('POST method is not supported for this path.')
-        self.finish()
+        super(BaseHandler, self).finish()
 
     def render(self, template_name, **kwargs):
         super(BaseHandler, self).render(
@@ -44,7 +44,7 @@ class BaseHandler(tornado.web.RequestHandler):
 
     def error(self, err_msg='Something went wrong.'):
         self.write(err_msg)
-        self.finish()
+        super(BaseHandler, self).finish()
 
     def get_tokens(self):
         tokens = {}
