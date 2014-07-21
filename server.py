@@ -185,13 +185,11 @@ class Request(object):
 
     def update(self):
         status = self.instance.parse_qs(self.instance.request.body)['status']
-        tokens = self.instance.get_tokens()
 
-        if tokens[self.provider]:
-            if self.provider in g['oauth_1_providers']:
-                oauth_version = OAUTH_1
-            else:
-                oauth_version = OAUTH_2
+        if self.provider in g['oauth_1_providers']:
+            oauth_version = OAUTH_1
+        else:
+            oauth_version = OAUTH_2
 
         return self._gen_request(
             oauth_version, self.urls['update'], POST, status=status)
@@ -284,14 +282,26 @@ class APIHandler(BaseHandler):
 
     @tornado.gen.coroutine
     def post(self, action):
+        tokens = self.get_tokens()
+        secrets = self.get_secrets()
+
         if action == 'update':
+            responses = {}
+
             for provider in g['providers']:
-                try:
-                    response = yield tornado.gen.Task(
-                        client.fetch, Request(self, provider).update())
-                except tornado.httpclient.HTTPError, err_msg:
-                    self.error(err_msg, 'update')
-                    return
+                token = tokens.get(provider)
+                secret = secrets.get(provider)
+
+                if token:
+                    try:
+                        response = yield tornado.gen.Task(
+                            client.fetch,
+                            Request(self, provider, token, secret).update())
+                    except tornado.httpclient.HTTPError, err_msg:
+                        self.error(err_msg, 'update')
+                        return
+
+                    responses[provider] = response.body
 
         elif action == 'clear_accounts':
             self.clear_all_cookies()
@@ -300,7 +310,7 @@ class APIHandler(BaseHandler):
             self.error('Unknown action.')
             return
 
-        self.finish(action)
+        self.finish(action, **responses)
 
 
 routers = [
